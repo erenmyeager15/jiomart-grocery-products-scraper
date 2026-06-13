@@ -71,15 +71,17 @@ const isPlaceholderPackSize = (value: string | null): boolean => (
 );
 
 const extractPackSizeFromTitle = (title: string): string | null => {
-    const match = title.match(/\b\d+(?:\.\d+)?\s*(?:kg|kgs|g|gm|grams|ml|l|ltr|litre|litres|liter|liters|pcs|pc|pieces|pack|packs)\b/i);
+    const match = title.match(/(?:^|[^0-9.])(\d+(?:\.\d+)?\s*(?:kg|kgs|g|gm|gram|grams|ml|l|ltr|litre|litres|liter|liters|pcs|pc|pieces|pack|packs)\b)/i);
     if (!match) return null;
-    return match[0]
+    return match[1]
         .replace(/\s+/g, ' ')
-        .replace(/\bkgs\b/i, 'kg')
+        .replace(/(\d(?:\.\d+)?)\s*([A-Za-z]+)/, '$1 $2')
+        .replace(/\bkgs?\b/i, 'kg')
         .replace(/\bgm\b/i, 'g')
-        .replace(/\bltr\b/i, 'L')
-        .replace(/\blitres?\b/i, 'L')
-        .replace(/\bliters?\b/i, 'L')
+        .replace(/\bgrams?\b/i, 'g')
+        .replace(/\bml\b/i, 'ml')
+        .replace(/\b(?:l|ltr|litres?|liters?)\b/i, 'L')
+        .replace(/\b(?:pc|pcs|pieces)\b/i, 'pcs')
         .trim();
 };
 
