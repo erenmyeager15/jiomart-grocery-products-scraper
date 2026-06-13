@@ -66,6 +66,29 @@ const parseVariantsCount = (item: JsonObject): number | null => {
     return null;
 };
 
+const isPlaceholderPackSize = (value: string | null): boolean => (
+    value === null || ['os', 'one size', 'one-size', 'na', 'n/a'].includes(value.toLowerCase())
+);
+
+const extractPackSizeFromTitle = (title: string): string | null => {
+    const match = title.match(/\b\d+(?:\.\d+)?\s*(?:kg|kgs|g|gm|grams|ml|l|ltr|litre|litres|liter|liters|pcs|pc|pieces|pack|packs)\b/i);
+    if (!match) return null;
+    return match[0]
+        .replace(/\s+/g, ' ')
+        .replace(/\bkgs\b/i, 'kg')
+        .replace(/\bgm\b/i, 'g')
+        .replace(/\bltr\b/i, 'L')
+        .replace(/\blitres?\b/i, 'L')
+        .replace(/\bliters?\b/i, 'L')
+        .trim();
+};
+
+const extractPackSize = (item: JsonObject, attributes: JsonObject | null, productName: string): string | null => {
+    const structuredSize = firstString(attributes?.['product-size']) ?? firstString(item.sizes);
+    if (!isPlaceholderPackSize(structuredSize)) return structuredSize;
+    return extractPackSizeFromTitle(productName) ?? structuredSize;
+};
+
 const extractStoreIdFromUrl = (url: string): string | null => {
     const decoded = decodeURIComponent(url);
     const match = decoded.match(/store_ids:([0-9]+)/);
@@ -154,7 +177,7 @@ export const extractProducts = (
                 skuCode: asString(rawItem.sku_code) ?? asString(rawItem.item_code),
                 productName,
                 brand,
-                packSize: firstString(attributes?.['product-size']) ?? firstString(rawItem.sizes),
+                packSize: extractPackSize(rawItem, attributes, productName),
                 currentPrice,
                 marketPrice,
                 discountPercent: parseDiscountPercent(rawItem.discount, currentPrice, marketPrice),
