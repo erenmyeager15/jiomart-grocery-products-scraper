@@ -1,0 +1,14 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "JioMart Grocery Products Output",
+  "description": "Structured JioMart grocery and product records with product names, brands, pack sizes, prices, MRP, discounts, stock status, categories, image URLs, product URLs, locations, and scraped timestamps.",
+  "type": "object",
+  "properties": {
+    "results": {
+      "type": "string",
+      "title": "JioMart product records",
+      "description": "Clean dataset items containing public JioMart product catalog, price, discount, stock, and listing URL data.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    }
+  }
+}

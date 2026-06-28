@@ -1,16 +1,16 @@
 {
   "title": "JioMart Grocery Scraper Input",
-  "description": "Search JioMart for public grocery and product catalog data, prices, discounts, stock status, images, and URLs.",
+  "description": "Search JioMart for public grocery and product catalog data, prices, discounts, stock status, images, and URLs. For a low-cost test, use one query, maxResults 5-10, maxPagesPerQuery 1, and India residential proxy.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
     "searchQueries": {
       "title": "Search queries",
-      "description": "One or more JioMart product searches. Duplicate products are removed across the run.",
+      "description": "One or more JioMart product searches. Start with one query for a low-cost test. Duplicate products are removed across the run.",
       "type": "array",
       "editor": "stringList",
-      "default": ["atta"],
-      "prefill": ["atta", "milk"]
+      "default": ["rice"],
+      "prefill": ["rice", "milk"]
     },
     "locationName": {
       "title": "Location label",
@@ -76,25 +76,25 @@
     },
     "maxResults": {
       "title": "Maximum products",
-      "description": "Maximum unique products saved across the complete run.",
+      "description": "Maximum unique products saved across the complete run. Use 5-10 for test runs. Use this field, not maxProducts.",
       "type": "integer",
       "editor": "number",
       "minimum": 1,
       "maximum": 500,
-      "default": 100
+      "default": 10
     },
     "maxPagesPerQuery": {
       "title": "Pages per query",
-      "description": "Maximum JioMart result payloads processed for each search query.",
+      "description": "Maximum JioMart result payloads processed for each search query. Use 1 for test runs. Use this field, not pagesPerQuery.",
       "type": "integer",
       "editor": "number",
       "minimum": 1,
       "maximum": 40,
-      "default": 8
+      "default": 1
     },
     "proxyConfiguration": {
       "title": "Proxy configuration",
-      "description": "India residential proxies are recommended for regional inventory and pricing.",
+      "description": "India residential proxies are recommended for regional inventory and pricing. Proxy traffic is billed as platform usage.",
       "type": "object",
       "editor": "proxy",
       "default": {
