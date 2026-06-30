@@ -1,32 +1,26 @@
 import { Actor, log } from 'apify';
 import { PlaywrightCrawler } from 'crawlee';
+import { normalizeInput } from './input.js';
 import { buildHomeUrl, buildProductsUrl, extractProducts, isBlockedPage } from './routes.js';
 import type { ActorInput, CapturedPayload, LocationSnapshot, RequestData } from './types.js';
 
 await Actor.init();
 
 const input = (await Actor.getInput<ActorInput>()) ?? {};
-const searchQueries = [...new Set((input.searchQueries ?? ['rice']).map((value) => value.trim()).filter(Boolean))];
-const requestedLocationName = input.locationName?.trim() || 'Mumbai';
-const latitude = input.latitude ?? 19.076;
-const longitude = input.longitude ?? 72.8777;
-const brands = new Set((input.brands ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
-const categories = new Set((input.categories ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
-const inStockOnly = input.inStockOnly ?? false;
-const minPrice = Math.max(input.minPrice ?? 0, 0);
-const maxPrice = Math.max(input.maxPrice ?? 1_000_000, minPrice);
-const maxResults = Math.min(Math.max(input.maxResults ?? 10, 1), 500);
-const maxPagesPerQuery = Math.min(Math.max(input.maxPagesPerQuery ?? 1, 1), 40);
+const normalizedInput = normalizeInput(input);
+const searchQueries = normalizedInput.searchQueries;
+const requestedLocationName = normalizedInput.locationName;
+const latitude = normalizedInput.latitude;
+const longitude = normalizedInput.longitude;
+const brands = new Set(normalizedInput.brands.map((value) => value.toLowerCase()));
+const categories = new Set(normalizedInput.categories.map((value) => value.toLowerCase()));
+const inStockOnly = normalizedInput.inStockOnly;
+const minPrice = normalizedInput.minPrice;
+const maxPrice = normalizedInput.maxPrice;
+const maxResults = normalizedInput.maxResults;
+const maxPagesPerQuery = normalizedInput.maxPagesPerQuery;
 
-if (searchQueries.length === 0) throw new Error('Provide at least one JioMart search query.');
-
-const proxyConfiguration = await Actor.createProxyConfiguration(
-    input.proxyConfiguration ?? {
-        useApifyProxy: true,
-        apifyProxyGroups: ['RESIDENTIAL'],
-        apifyProxyCountry: 'IN',
-    },
-);
+const proxyConfiguration = await Actor.createProxyConfiguration(normalizedInput.proxyConfiguration);
 
 const seenProductKeys = new Set<string>();
 let savedCount = 0;
@@ -266,6 +260,9 @@ await crawler.run(requests);
 if (fatalBillingError) throw fatalBillingError;
 if (savedCount === 0 && failedRequestCount > 0) {
     throw new Error(`JioMart scrape failed: ${failedRequestCount} request(s) failed and no products were saved.`);
+}
+if (savedCount === 0 && !spendingLimitReached) {
+    throw new Error('JioMart scrape finished with zero products saved. The source may be blocked, empty, or filtered out.');
 }
 if (!spendingLimitReached) await Actor.setStatusMessage(`Finished with ${savedCount} unique products`);
 log.info(`JioMart scrape finished with ${savedCount} unique products.`);
