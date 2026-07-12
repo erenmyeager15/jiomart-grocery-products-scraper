@@ -33,11 +33,6 @@ const firstString = (value: unknown): string | null => {
     return asString(value);
 };
 
-const parseIntegerString = (value: unknown): number | null => {
-    const parsed = asNumber(value);
-    return parsed === null ? null : Math.round(parsed);
-};
-
 const getPath = (value: unknown, path: string[]): unknown => {
     let current: unknown = value;
     for (const key of path) {
@@ -45,6 +40,24 @@ const getPath = (value: unknown, path: string[]): unknown => {
         current = current[key];
     }
     return current;
+};
+
+/** Returns the first finite number found across the given candidate paths. */
+const pickNumber = (item: JsonObject, paths: string[][]): number | null => {
+    for (const path of paths) {
+        const found = asNumber(getPath(item, path));
+        if (found !== null) return found;
+    }
+    return null;
+};
+
+/** Returns the first non-empty string found across the given candidate paths. */
+const pickString = (item: JsonObject, paths: string[][]): string | null => {
+    for (const path of paths) {
+        const found = asString(getPath(item, path));
+        if (found !== null) return found;
+    }
+    return null;
 };
 
 const normalizeUrl = (url: string | null): string | null => {
@@ -55,20 +68,166 @@ const normalizeUrl = (url: string | null): string | null => {
     return `https://www.jiomart.com${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
+// ---------------------------------------------------------------------------
+// Tolerant field resolvers. JioMart shifts its internal payload shape between
+// builds, so each field is resolved from the known path first, then fallbacks.
+// Every resolver only returns REAL values (or null) - nothing is fabricated.
+// ---------------------------------------------------------------------------
+const PRICE_PATHS: string[][] = [
+    ['price', 'effective', 'min'],
+    ['price', 'effective'],
+    ['price', 'selling', 'min'],
+    ['price', 'selling'],
+    ['price', 'min'],
+    ['sellingPrice'],
+    ['selling_price'],
+    ['sale_price'],
+    ['final_price'],
+    ['effective_price'],
+    ['price'],
+];
+
+const MARKET_PRICE_PATHS: string[][] = [
+    ['price', 'marked', 'min'],
+    ['price', 'marked'],
+    ['mrp'],
+    ['marked_price'],
+    ['price', 'max'],
+];
+
+const NAME_PATHS: string[][] = [['name'], ['title'], ['product_name'], ['product', 'name']];
+
+const resolvePrice = (item: JsonObject): number | null => pickNumber(item, PRICE_PATHS);
+const resolveMarketPrice = (item: JsonObject): number | null => pickNumber(item, MARKET_PRICE_PATHS);
+const resolveName = (item: JsonObject): string | null => pickString(item, NAME_PATHS);
+
+const resolveBrand = (item: JsonObject): string | null => (
+    pickString(item, [['brand', 'name'], ['brand'], ['brand_name']])
+);
+
+const resolveSlug = (item: JsonObject): string | null => (
+    pickString(item, [['slug'], ['seo', 'slug'], ['url_key']])
+);
+
+const resolveProductUrl = (item: JsonObject, slug: string | null): string | null => {
+    if (slug) return normalizeUrl(`/p/${slug}`);
+    return normalizeUrl(pickString(item, [['url'], ['product_url'], ['action', 'url']]));
+};
+
+const resolveImageUrl = (item: JsonObject): string | null => {
+    const medias = Array.isArray(item.medias) ? item.medias : [];
+    const firstMedia = asObject(medias[0]);
+    const fromMedia = asString(firstMedia?.url);
+    if (fromMedia) return normalizeUrl(fromMedia);
+
+    const images = Array.isArray(item.images) ? item.images : [];
+    const firstImage = images[0];
+    const fromImages = isObject(firstImage) ? asString(firstImage.url) : asString(firstImage);
+    if (fromImages) return normalizeUrl(fromImages);
+
+    return normalizeUrl(pickString(item, [['image'], ['image_url'], ['imageUrl']]));
+};
+
+const resolveCategory = (item: JsonObject): string | null => {
+    const l1 = asObject(getPath(item, ['hierarchy', 'l1_category']));
+    const attributes = asObject(item.attributes);
+    return asString(l1?.name)
+        ?? firstString(attributes?.['l1-category'])
+        ?? pickString(item, [['category'], ['category_name'], ['l1_category']]);
+};
+
+const resolveRating = (item: JsonObject): number | null => (
+    pickNumber(item, [['rating'], ['rating', 'average'], ['avg_rating'], ['ratings', 'average']])
+);
+
+const resolveInStock = (item: JsonObject): boolean | null => {
+    const sellableRaw = item.sellable ?? item.in_stock ?? item.available ?? item.is_available;
+    const sellable = typeof sellableRaw === 'boolean' ? sellableRaw : null;
+    const stockVariantIds = getPath(item, ['instock_variants', 'item_id']);
+    return sellable !== false && (!Array.isArray(stockVariantIds) || stockVariantIds.length > 0);
+};
+
+const resolveProductId = (item: JsonObject, name: string, price: number, slug: string | null): string => {
+    const rawProductId = item.uid ?? item.sku_code ?? item.item_code ?? item.id ?? item.product_id ?? item.product_code;
+    return (
+        (typeof rawProductId === 'string' && rawProductId.trim())
+        || (typeof rawProductId === 'number' && Number.isFinite(rawProductId) ? String(rawProductId) : null)
+        || (slug ? `slug:${slug}` : null)
+        || `fallback:${name.toLowerCase().replace(/\s+/g, '-')}:${price}`
+    );
+};
+
+const hasIdSignal = (item: JsonObject): boolean => (
+    item.uid !== undefined
+    || item.sku_code !== undefined
+    || item.item_code !== undefined
+    || item.id !== undefined
+    || item.product_id !== undefined
+    || item.product_code !== undefined
+    || asString(item.slug) !== null
+    || item.type === 'product'
+);
+
+/** A candidate is a product only if it has a real name, a real price, and a product identity. */
+const isProductItem = (value: JsonObject): boolean => (
+    resolveName(value) !== null && resolvePrice(value) !== null && hasIdSignal(value)
+);
+
+// ---------------------------------------------------------------------------
+// Container discovery: JioMart nests the product array under different keys
+// across builds, so search the known keys, then shallow-scan for an array of
+// product-like objects.
+// ---------------------------------------------------------------------------
+const CONTAINER_PATHS: string[][] = [
+    ['items'],
+    ['data', 'items'],
+    ['products'],
+    ['data', 'products'],
+    ['results'],
+    ['data', 'results'],
+    ['response', 'items'],
+    ['catalog', 'items'],
+    ['data', 'catalog', 'items'],
+];
+
+const looksLikeProductArray = (value: unknown): value is unknown[] => (
+    Array.isArray(value) && value.some((entry) => isObject(entry) && isProductItem(entry))
+);
+
+const searchForProductArray = (node: unknown, depth: number): unknown[] | null => {
+    if (depth > 4) return null;
+    if (looksLikeProductArray(node)) return node;
+    if (Array.isArray(node)) {
+        for (const entry of node) {
+            const found = searchForProductArray(entry, depth + 1);
+            if (found) return found;
+        }
+        return null;
+    }
+    if (isObject(node)) {
+        for (const entry of Object.values(node)) {
+            const found = searchForProductArray(entry, depth + 1);
+            if (found) return found;
+        }
+    }
+    return null;
+};
+
+const findItemsArray = (root: JsonObject | null): unknown[] => {
+    if (!root) return [];
+    for (const path of CONTAINER_PATHS) {
+        const candidate = getPath(root, path);
+        if (looksLikeProductArray(candidate)) return candidate;
+    }
+    return searchForProductArray(root, 0) ?? [];
+};
+
 const parseDiscountPercent = (value: unknown, currentPrice: number, marketPrice: number | null): number | null => {
     const direct = asNumber(value);
     if (direct !== null) return Math.round(direct);
     if (marketPrice !== null && marketPrice > currentPrice && marketPrice > 0) {
         return Math.round(((marketPrice - currentPrice) / marketPrice) * 100);
     }
-    return null;
-};
-
-const parseVariantsCount = (item: JsonObject): number | null => {
-    const instockItemIds = getPath(item, ['instock_variants', 'item_id']);
-    if (Array.isArray(instockItemIds)) return instockItemIds.length;
-    const sizes = item.sizes;
-    if (Array.isArray(sizes)) return sizes.length;
     return null;
 };
 
@@ -97,12 +256,6 @@ const extractPackSize = (item: JsonObject, attributes: JsonObject | null, produc
     return extractPackSizeFromTitle(productName) ?? structuredSize;
 };
 
-const isProductItem = (value: JsonObject): boolean => (
-    value.type === 'product'
-    && (asString(value.name) !== null)
-    && asNumber(getPath(value, ['price', 'effective', 'min'])) !== null
-);
-
 export const buildHomeUrl = (query: string): string => (
     `https://www.jiomart.com/?search=${encodeURIComponent(query)}`
 );
@@ -110,6 +263,20 @@ export const buildHomeUrl = (query: string): string => (
 export const buildProductsUrl = (query: string): string => (
     `https://www.jiomart.com/products?q=${encodeURIComponent(query)}`
 );
+
+/**
+ * Matches JioMart product JSON API responses while tolerating path/version
+ * drift (e.g. api version bumps or renamed segments). Excludes the HTML
+ * `/products?q=` navigation page, which contains "product" but no API segment.
+ */
+export const isProductsApiUrl = (url: string): boolean => {
+    const lower = url.toLowerCase();
+    if (!lower.includes('product')) return false;
+    return lower.includes('/api/')
+        || lower.includes('/vertex/')
+        || lower.includes('/catalog')
+        || lower.includes('/mst/');
+};
 
 export const isBlockedPage = (title: string, body: string): boolean => {
     const text = `${title}\n${body}`.toLowerCase();
@@ -132,35 +299,20 @@ export const extractProducts = (
 
     for (const payload of payloads) {
         const root = asObject(payload.json);
-        const items = Array.isArray(root?.items) ? root.items : [];
+        const items = findItemsArray(root);
         for (const rawItem of items) {
             if (!isObject(rawItem) || !isProductItem(rawItem)) continue;
 
-            const productName = asString(rawItem.name);
-            const currentPrice = asNumber(getPath(rawItem, ['price', 'effective', 'min']));
+            const productName = resolveName(rawItem);
+            const currentPrice = resolvePrice(rawItem);
             if (!productName || currentPrice === null) continue;
 
-            const slug = asString(rawItem.slug);
-            const rawProductId = rawItem.uid ?? rawItem.sku_code ?? rawItem.item_code;
-            const productId = (
-                (typeof rawProductId === 'string' && rawProductId.trim())
-                || (typeof rawProductId === 'number' && Number.isFinite(rawProductId) ? String(rawProductId) : null)
-                || (slug ? `slug:${slug}` : null)
-                || `fallback:${productName.toLowerCase().replace(/\s+/g, '-')}:${currentPrice}`
-            );
+            const slug = resolveSlug(rawItem);
+            const productId = resolveProductId(rawItem, productName, currentPrice, slug);
             if (products.has(productId)) continue;
 
-            const marketPrice = asNumber(getPath(rawItem, ['price', 'marked', 'min']));
-            const brand = asString(getPath(rawItem, ['brand', 'name']));
-            const hierarchy = asObject(rawItem.hierarchy);
-            const l1 = asObject(hierarchy?.l1_category);
+            const marketPrice = resolveMarketPrice(rawItem);
             const attributes = asObject(rawItem.attributes);
-            const medias = Array.isArray(rawItem.medias) ? rawItem.medias : [];
-            const firstMedia = asObject(medias[0]);
-            const productUrl = normalizeUrl(slug ? `/p/${slug}` : null);
-            const sellable = typeof rawItem.sellable === 'boolean' ? rawItem.sellable : null;
-            const stockVariantIds = getPath(rawItem, ['instock_variants', 'item_id']);
-            const inStock = sellable !== false && (!Array.isArray(stockVariantIds) || stockVariantIds.length > 0);
 
             position += 1;
             products.set(productId, {
@@ -169,18 +321,18 @@ export const extractProducts = (
                 position,
                 productId,
                 title: productName,
-                brand: textOrNA(brand),
+                brand: textOrNA(resolveBrand(rawItem)),
                 price: currentPrice,
                 mrp: marketPrice,
                 discountPercent: parseDiscountPercent(rawItem.discount, currentPrice, marketPrice),
-                currency: asString(getPath(rawItem, ['price', 'currency_code'])) ?? 'INR',
+                currency: asString(getPath(rawItem, ['price', 'currency_code'])) ?? asString(rawItem.currency) ?? 'INR',
                 packSize: textOrNA(extractPackSize(rawItem, attributes, productName)),
-                category: textOrNA(asString(l1?.name) ?? firstString(attributes?.['l1-category'])),
-                rating: asNumber(rawItem.rating),
+                category: textOrNA(resolveCategory(rawItem)),
+                rating: resolveRating(rawItem),
                 ratingCount: null,
-                inStock,
-                productUrl,
-                imageUrl: normalizeUrl(asString(firstMedia?.url)),
+                inStock: resolveInStock(rawItem),
+                productUrl: resolveProductUrl(rawItem, slug),
+                imageUrl: resolveImageUrl(rawItem),
                 scrapedAt: new Date().toISOString(),
             });
         }

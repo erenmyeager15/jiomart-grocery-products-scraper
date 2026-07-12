@@ -1,7 +1,7 @@
 import { Actor, log } from 'apify';
 import { PlaywrightCrawler } from 'crawlee';
 import { normalizeInput } from './input.js';
-import { buildHomeUrl, buildProductsUrl, extractProducts, isBlockedPage } from './routes.js';
+import { buildHomeUrl, buildProductsUrl, extractProducts, isBlockedPage, isProductsApiUrl } from './routes.js';
 import type { ActorInput, CapturedPayload, LocationSnapshot, RequestData } from './types.js';
 
 await Actor.init();
@@ -141,7 +141,7 @@ const crawler = new PlaywrightCrawler({
 
         const responseHandler = (response: any): void => {
             const url = response.url();
-            if (response.status() !== 200 || !url.includes('/ext/vertex/application/api/v1.0/products')) return;
+            if (response.status() !== 200 || !isProductsApiUrl(url)) return;
             const task = response.json()
                 .then((json: unknown) => { payloads.push({ url, json }); })
                 .catch(() => undefined)
