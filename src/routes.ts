@@ -222,6 +222,45 @@ const findItemsArray = (root: JsonObject | null): unknown[] => {
     return searchForProductArray(root, 0) ?? [];
 };
 
+const QUERY_STOP_WORDS = new Set(['and', 'for', 'from', 'online', 'pack', 'product', 'products', 'the', 'with']);
+
+const normalizeMatchText = (value: string): string => value
+    .toLowerCase()
+    .replace(/([a-z])([0-9])/g, '$1 $2')
+    .replace(/([0-9])([a-z])/g, '$1 $2')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const buildQueryTokens = (query: string): string[] => (
+    [...new Set(normalizeMatchText(query).split(' '))]
+        .filter((token) => token.length >= 2 && !QUERY_STOP_WORDS.has(token))
+);
+
+const tokenMatchesWords = (token: string, words: Set<string>): boolean => {
+    if (words.has(token)) return true;
+    const singularToken = token.endsWith('s') && token.length > 3 ? token.slice(0, -1) : token;
+    if (words.has(singularToken)) return true;
+    return [...words].some((word) => word.endsWith('s') && word.length > 3 && word.slice(0, -1) === singularToken);
+};
+
+const matchesProductQuery = (item: JsonObject, queryTokens: string[]): boolean => {
+    if (queryTokens.length === 0) return true;
+    const searchable = [resolveName(item), resolveBrand(item), resolveCategory(item), resolveSlug(item)]
+        .filter((value): value is string => Boolean(value))
+        .join(' ');
+    const words = new Set(normalizeMatchText(searchable).split(' ').filter(Boolean));
+    return queryTokens.some((token) => tokenMatchesWords(token, words));
+};
+
+export const countRelevantProductPayloads = (payloads: CapturedPayload[], searchQuery: string): number => {
+    const queryTokens = buildQueryTokens(searchQuery);
+    return payloads.reduce((count, payload) => {
+        const items = findItemsArray(asObject(payload.json));
+        return count + (items.some((item) => isObject(item) && isProductItem(item) && matchesProductQuery(item, queryTokens)) ? 1 : 0);
+    }, 0);
+};
+
 const parseDiscountPercent = (value: unknown, currentPrice: number, marketPrice: number | null): number | null => {
     const direct = asNumber(value);
     if (direct !== null) return Math.round(direct);
@@ -295,13 +334,14 @@ export const extractProducts = (
     location: LocationSnapshot,
 ): ProductRecord[] => {
     const products = new Map<string, ProductRecord>();
+    const queryTokens = buildQueryTokens(searchQuery);
     let position = 0;
 
     for (const payload of payloads) {
         const root = asObject(payload.json);
         const items = findItemsArray(root);
         for (const rawItem of items) {
-            if (!isObject(rawItem) || !isProductItem(rawItem)) continue;
+            if (!isObject(rawItem) || !isProductItem(rawItem) || !matchesProductQuery(rawItem, queryTokens)) continue;
 
             const productName = resolveName(rawItem);
             const currentPrice = resolvePrice(rawItem);

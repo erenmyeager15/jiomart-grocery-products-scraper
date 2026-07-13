@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractProducts, isProductsApiUrl } from '../dist/routes.js';
+import { countRelevantProductPayloads, extractProducts, isProductsApiUrl } from '../dist/routes.js';
 
 const LOCATION = {
     locationName: 'Mumbai',
@@ -84,6 +84,50 @@ test('returns no rows for empty or non-product payloads (never fabricates data)'
     assert.deepEqual(extractProducts(payload({ items: [{ type: 'banner', title: 'Ad' }] }), 'rice', LOCATION), []);
     assert.deepEqual(extractProducts(payload({}), 'rice', LOCATION), []);
     assert.deepEqual(extractProducts([{ url: 'x', json: null }], 'rice', LOCATION), []);
+});
+
+test('rejects real recommendation products that do not match the search query', () => {
+    const recommendation = payload({
+        items: [
+            {
+                type: 'product',
+                uid: '61792948',
+                name: 'Madric Microfiber Twist Mop for Floor Cleaning',
+                slug: 'madric-microfiber-twist-mop-61792948',
+                brand: { name: 'MADRIC' },
+                price: { effective: { min: 203 }, marked: { min: 799 } },
+                hierarchy: { l1_category: { name: 'Home Cleaning & Organisation' } },
+            },
+        ],
+    });
+
+    assert.equal(countRelevantProductPayloads(recommendation, 'rice'), 0);
+    assert.deepEqual(extractProducts(recommendation, 'rice', LOCATION), []);
+});
+
+test('keeps matching products when recommendation and search payloads are mixed', () => {
+    const mixed = [
+        ...payload({
+            items: [{ type: 'product', uid: 'mop-1', name: 'Floor Cleaning Mop', sellingPrice: 199 }],
+        }),
+        ...payload({
+            data: {
+                products: [{
+                    sku_code: 'rice-1',
+                    title: 'Gopal Premium Banskathi Rice 10 kg',
+                    sellingPrice: 1149,
+                    mrp: 2500,
+                    brand_name: 'Gopal',
+                    category_name: 'Cooking Essentials',
+                }],
+            },
+        }),
+    ];
+
+    const products = extractProducts(mixed, 'rice', LOCATION);
+    assert.equal(countRelevantProductPayloads(mixed, 'rice'), 1);
+    assert.equal(products.length, 1);
+    assert.equal(products[0].title, 'Gopal Premium Banskathi Rice 10 kg');
 });
 
 test('isProductsApiUrl matches product APIs across version drift but not the HTML page', () => {

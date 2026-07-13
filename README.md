@@ -108,6 +108,8 @@ Cost-control tips:
 
 ## Reliability Notes
 
+- Captured browser responses are accepted only when the product title, brand, category, or slug matches the requested search terms. Home-page recommendations and unrelated sponsored payloads are discarded instead of being returned as search results.
+
 - JioMart prices, stock, delivery windows, and available products vary by detected location.
 - Some products do not expose ratings, discounts, or complete metadata. Missing values are saved as `null` or `N/A`.
 - The Actor fails blocked or empty zero-result runs instead of silently reporting success with no saved products.

@@ -1,7 +1,14 @@
 import { Actor, log } from 'apify';
 import { PlaywrightCrawler } from 'crawlee';
 import { normalizeInput } from './input.js';
-import { buildHomeUrl, buildProductsUrl, extractProducts, isBlockedPage, isProductsApiUrl } from './routes.js';
+import {
+    buildHomeUrl,
+    buildProductsUrl,
+    countRelevantProductPayloads,
+    extractProducts,
+    isBlockedPage,
+    isProductsApiUrl,
+} from './routes.js';
 import type { ActorInput, CapturedPayload, LocationSnapshot, RequestData } from './types.js';
 
 await Actor.init();
@@ -149,6 +156,17 @@ const crawler = new PlaywrightCrawler({
             responseTasks.add(task);
         };
 
+        const settleResponseTasks = async (): Promise<void> => {
+            while (responseTasks.size > 0) {
+                await Promise.allSettled([...responseTasks]);
+            }
+        };
+
+        const clearCapturedPayloads = async (): Promise<void> => {
+            await settleResponseTasks();
+            payloads.length = 0;
+        };
+
         page.on('response', responseHandler);
         await page.waitForLoadState('domcontentloaded', { timeout: 90_000 }).catch(() => undefined);
         await page.waitForTimeout(3_000);
@@ -162,6 +180,7 @@ const crawler = new PlaywrightCrawler({
 
         const searchInput = page.locator('input[placeholder*="Search"], input[type="text"]').first();
         if (await searchInput.count()) {
+            await clearCapturedPayloads();
             await searchInput.fill(searchQuery);
             await Promise.all([
                 page.waitForURL(/\/products\?q=/, { timeout: 30_000 }).catch(() => undefined),
@@ -170,14 +189,21 @@ const crawler = new PlaywrightCrawler({
         }
 
         await page.waitForTimeout(6_000);
+        await settleResponseTasks();
 
-        if (payloads.length === 0) {
+        if (countRelevantProductPayloads(payloads, searchQuery) === 0) {
+            await clearCapturedPayloads();
             await page.goto(buildProductsUrl(searchQuery), { waitUntil: 'domcontentloaded', timeout: 90_000 });
             await page.waitForTimeout(6_000);
+            await settleResponseTasks();
         }
 
         let idleRounds = 0;
-        for (let round = 0; round < maxPagesPerQuery * 3 && payloads.length < maxPagesPerQuery; round += 1) {
+        for (
+            let round = 0;
+            round < maxPagesPerQuery * 3 && countRelevantProductPayloads(payloads, searchQuery) < maxPagesPerQuery;
+            round += 1
+        ) {
             const before = payloads.length;
             await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
             await page.waitForTimeout(1_500 + Math.floor(Math.random() * 1_500));
@@ -185,7 +211,7 @@ const crawler = new PlaywrightCrawler({
             if (idleRounds >= 3) break;
         }
 
-        await Promise.allSettled([...responseTasks]);
+        await settleResponseTasks();
         page.off('response', responseHandler);
 
         title = await page.title();
@@ -196,7 +222,8 @@ const crawler = new PlaywrightCrawler({
         }
 
         const location = await readLocationSnapshot(page);
-        const products = extractProducts(payloads.slice(0, maxPagesPerQuery), searchQuery, location);
+        const relevantPayloadCount = countRelevantProductPayloads(payloads, searchQuery);
+        const products = extractProducts(payloads, searchQuery, location);
         if (products.length === 0) {
             session?.markBad();
             throw new Error(`No JioMart product records found for "${searchQuery}".`);
@@ -242,6 +269,7 @@ const crawler = new PlaywrightCrawler({
 
         log.info(`Processed JioMart search "${searchQuery}"`, {
             payloadsCaptured: payloads.length,
+            queryRelevantPayloads: relevantPayloadCount,
             productsFound: products.length,
             totalSaved: savedCount,
             location,

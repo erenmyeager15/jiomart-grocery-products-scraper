@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
-    "test": "npm run build && node --test test/routes.test.mjs"
+    "test": "npm run build && node --test test/*.test.mjs"
   },
   "keywords": [
     "apify",
