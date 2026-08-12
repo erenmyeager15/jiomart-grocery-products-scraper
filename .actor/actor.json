@@ -1,8 +1,8 @@
 {
   "actorSpecification": 1,
   "name": "jiomart-grocery-products-scraper",
-  "title": "JioMart Product Scraper: Prices & Stock",
-  "description": "Scrape public JioMart location-specific grocery and product listings for titles, brands, pack sizes, prices, MRP, discounts, categories, stock status, images, and URLs.",
+  "title": "JioMart Product Scraper - $1/1k, Prices & Stock by Pincode",
+  "description": "Scrape public JioMart product listings by keyword and delivery pincode: prices, MRP, discounts, pack sizes, stock, categories, ratings, images, and URLs. $1.00 per 1,000 products, no run-start fee, no login.",
   "version": "1.0",
   "buildTag": "latest",
   "dockerfile": "Dockerfile",
