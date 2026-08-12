@@ -5,6 +5,8 @@ export interface NormalizedInput {
     locationName: string;
     latitude: number;
     longitude: number;
+    pincode: string;
+    state: string | null;
     brands: string[];
     categories: string[];
     inStockOnly: boolean;
@@ -71,6 +73,15 @@ function asBoolean(value: unknown, fieldName: string, defaultValue: boolean): bo
     fail('must be a boolean.', fieldName);
 }
 
+function asPincode(value: unknown): string {
+    if (value === undefined || value === null || value === '') return '400001';
+    const text = typeof value === 'number' ? String(value) : value;
+    if (typeof text !== 'string') fail('must be a 6-digit Indian pincode.', 'pincode');
+    const trimmed = text.trim();
+    if (!/^[1-9][0-9]{5}$/.test(trimmed)) fail('must be a 6-digit Indian pincode.', 'pincode');
+    return trimmed;
+}
+
 function asProxyConfiguration(value: unknown): ProxyInput {
     if (value === undefined || value === null || value === '') return { ...DEFAULT_PROXY_CONFIGURATION };
     if (typeof value !== 'object' || Array.isArray(value)) fail('must be a proxy configuration object.', 'proxyConfiguration');
@@ -89,13 +100,21 @@ export function normalizeInput(raw: ActorInput = {}): NormalizedInput {
         locationName: asString(raw.locationName, 'locationName', 'Mumbai'),
         latitude: asNumberInRange(raw.latitude, 'latitude', 19.076, -90, 90),
         longitude: asNumberInRange(raw.longitude, 'longitude', 72.8777, -180, 180),
+        // JioMart resolves the serving catalogue from the pincode, so this is what
+        // actually controls regional prices and stock.
+        pincode: asPincode(raw.pincode),
+        state: raw.state === undefined || raw.state === null || raw.state === ''
+            ? null
+            : asString(raw.state, 'state', ''),
         brands: asStringArray(raw.brands, 'brands', [], 0, 20),
         categories: asStringArray(raw.categories, 'categories', [], 0, 20),
         inStockOnly: asBoolean(raw.inStockOnly, 'inStockOnly', true),
         minPrice,
         maxPrice,
-        maxResults: asIntInRange(raw.maxResults, 'maxResults', 1, 1, 500),
-        maxPagesPerQuery: asIntInRange(raw.maxPagesPerQuery, 'maxPagesPerQuery', 1, 1, 40),
+        // Defaults return a useful page of results. A one-product run costs about the same
+        // to produce as fifty, so a tiny default bills far less than it costs to serve.
+        maxResults: asIntInRange(raw.maxResults, 'maxResults', 50, 1, 500),
+        maxPagesPerQuery: asIntInRange(raw.maxPagesPerQuery, 'maxPagesPerQuery', 3, 1, 40),
         proxyConfiguration: asProxyConfiguration(raw.proxyConfiguration),
     };
 }

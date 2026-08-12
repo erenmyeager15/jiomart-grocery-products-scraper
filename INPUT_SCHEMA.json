@@ -21,6 +21,20 @@
       "editor": "textfield",
       "default": "Mumbai"
     },
+    "pincode": {
+      "title": "Delivery pincode",
+      "description": "Six-digit Indian pincode. JioMart resolves prices and stock from this, so it is what controls regional results.",
+      "type": "string",
+      "editor": "textfield",
+      "default": "400001",
+      "prefill": "400001"
+    },
+    "state": {
+      "title": "State (optional)",
+      "description": "Optional state label stored with the run. JioMart matches on the pincode alone.",
+      "type": "string",
+      "editor": "textfield"
+    },
     "latitude": {
       "title": "Latitude",
       "description": "Delivery-area latitude used for JioMart's location-aware catalog.",
@@ -82,23 +96,23 @@
     },
     "maxResults": {
       "title": "Maximum products",
-      "description": "Maximum unique products saved across the complete run. The default is 1 for a low-cost first run. Use this field, not maxProducts.",
+      "description": "Maximum unique products saved across the complete run. Use this field, not maxProducts.",
       "type": "integer",
       "editor": "number",
       "minimum": 1,
       "maximum": 500,
-      "default": 1,
-      "prefill": 1
+      "default": 50,
+      "prefill": 50
     },
     "maxPagesPerQuery": {
       "title": "Pages per query",
-      "description": "Maximum JioMart result payloads processed for each search query. Use 1 for test runs. Use this field, not pagesPerQuery.",
+      "description": "Maximum JioMart catalogue pages requested for each search query. Each page holds up to 20 products.",
       "type": "integer",
       "editor": "number",
       "minimum": 1,
       "maximum": 40,
-      "default": 1,
-      "prefill": 1
+      "default": 3,
+      "prefill": 3
     },
     "proxyConfiguration": {
       "title": "Proxy configuration",

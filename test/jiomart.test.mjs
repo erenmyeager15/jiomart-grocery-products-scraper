@@ -63,8 +63,9 @@ test('normalizes default input to one low-cost Mumbai rice run', () => {
     assert.equal(input.inStockOnly, true);
     assert.equal(input.minPrice, 0);
     assert.equal(input.maxPrice, 1000000);
-    assert.equal(input.maxResults, 1);
-    assert.equal(input.maxPagesPerQuery, 1);
+    assert.equal(input.maxResults, 50);
+    assert.equal(input.maxPagesPerQuery, 3);
+    assert.equal(input.pincode, '400001');
     assert.equal(input.proxyConfiguration.useApifyProxy, true);
     assert.deepEqual(input.proxyConfiguration.apifyProxyGroups, ['RESIDENTIAL']);
     assert.equal(input.proxyConfiguration.apifyProxyCountry, 'IN');

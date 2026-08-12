@@ -8,8 +8,11 @@ export interface ProxyInput {
 export interface ActorInput {
     searchQueries?: string[];
     locationName?: string;
+    /** Legacy: JioMart resolves the catalogue from the pincode, not coordinates. */
     latitude?: number;
     longitude?: number;
+    pincode?: string;
+    state?: string;
     brands?: string[];
     categories?: string[];
     inStockOnly?: boolean;
