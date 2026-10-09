@@ -213,14 +213,22 @@ const searchForProductArray = (node: unknown, depth: number): unknown[] | null =
     return null;
 };
 
-const findItemsArray = (root: JsonObject | null): unknown[] => {
-    if (!root) return [];
+const findItemsArrayOrNull = (root: JsonObject | null): unknown[] | null => {
+    if (!root) return null;
     for (const path of CONTAINER_PATHS) {
         const candidate = getPath(root, path);
-        if (looksLikeProductArray(candidate)) return candidate;
+        // Known catalogue containers can be legitimately empty.
+        if (Array.isArray(candidate)) return candidate;
     }
-    return searchForProductArray(root, 0) ?? [];
+    return searchForProductArray(root, 0);
 };
+
+const findItemsArray = (root: JsonObject | null): unknown[] => findItemsArrayOrNull(root) ?? [];
+
+/** True only when the payload exposes a recognized catalogue collection. */
+export const isReadableCatalogPayload = (payload: CapturedPayload): boolean => (
+    findItemsArrayOrNull(asObject(payload.json)) !== null
+);
 
 const QUERY_STOP_WORDS = new Set(['and', 'for', 'from', 'online', 'pack', 'product', 'products', 'the', 'with']);
 

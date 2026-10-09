@@ -1,6 +1,6 @@
 {
   "title": "JioMart Grocery Scraper Input",
-  "description": "Search JioMart for public grocery and product catalog data, prices, discounts, stock status, images, and URLs. The default input saves one in-stock product from Mumbai for a low-cost first run.",
+  "description": "Search JioMart for public grocery and product catalog data, prices, discounts, stock status, images, and URLs. The Store example saves one product; Console defaults allow up to 50.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -16,7 +16,7 @@
     },
     "locationName": {
       "title": "Location label",
-      "description": "Human-readable location label. JioMart may refine the final detected city, state, and pincode inside the browser session.",
+      "description": "Human-readable location label sent with the request and stored with output. The delivery pincode controls the regional catalog.",
       "type": "string",
       "editor": "textfield",
       "default": "Mumbai"
@@ -37,7 +37,7 @@
     },
     "latitude": {
       "title": "Latitude",
-      "description": "Delivery-area latitude used for JioMart's location-aware catalog.",
+      "description": "Legacy compatibility field retained for saved tasks. The current catalog request is resolved by delivery pincode.",
       "type": "number",
       "editor": "number",
       "minimum": -90,
@@ -46,7 +46,7 @@
     },
     "longitude": {
       "title": "Longitude",
-      "description": "Delivery-area longitude used for JioMart's location-aware catalog.",
+      "description": "Legacy compatibility field retained for saved tasks. The current catalog request is resolved by delivery pincode.",
       "type": "number",
       "editor": "number",
       "minimum": -180,
@@ -116,7 +116,7 @@
     },
     "proxyConfiguration": {
       "title": "Proxy configuration",
-      "description": "India residential proxies are recommended for regional inventory and pricing. Proxy traffic is billed as platform usage.",
+      "description": "Optional bounded fallback. The Actor tries direct access first to control cost, then uses your configured proxy only if direct access is blocked or unreadable. It never enables Residential traffic when you selected no proxy.",
       "type": "object",
       "editor": "proxy",
       "default": {

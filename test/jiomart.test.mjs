@@ -51,7 +51,7 @@ const jiomartPayload = {
     ],
 };
 
-test('normalizes default input to one low-cost Mumbai rice run', () => {
+test('normalizes default input to a bounded Mumbai rice run', () => {
     const input = normalizeInput({});
 
     assert.deepEqual(input.searchQueries, ['rice']);

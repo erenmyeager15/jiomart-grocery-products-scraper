@@ -1,7 +1,8 @@
 import { Actor, log } from 'apify';
 import { fetchProductsPage } from './jiomartApi.js';
 import { normalizeInput } from './input.js';
-import { countRelevantProductPayloads, extractProducts, isBlockedPage } from './routes.js';
+import { buildFetchModes, classifyCompletion } from './run-policy.js';
+import { countRelevantProductPayloads, extractProducts, isBlockedPage, isReadableCatalogPayload } from './routes.js';
 import type { ActorInput, CapturedPayload, LocationSnapshot, ProductRecord } from './types.js';
 
 await Actor.init();
@@ -39,6 +40,8 @@ const seenProductKeys = new Set<string>();
 let savedCount = 0;
 let spendingLimitReached = false;
 let fatalBillingError: Error | null = null;
+let sourceValidQueryCount = 0;
+const emptyQueries: string[] = [];
 const skippedQueries: Array<{ query: string; reason: string }> = [];
 
 log.info('Starting JioMart scrape', {
@@ -52,11 +55,16 @@ log.info('Starting JioMart scrape', {
 /** Collects catalogue pages for one query, stopping once enough products are available. */
 async function collectPayloads(query: string, queryIndex: number, remaining: number): Promise<CapturedPayload[]> {
     let lastError: unknown = null;
+    const fetchModes = buildFetchModes(normalizedInput.proxyConfiguration.useApifyProxy === true);
 
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (const [attemptIndex, mode] of fetchModes.entries()) {
+        const attempt = attemptIndex + 1;
         const payloads: CapturedPayload[] = [];
         try {
-            const proxyUrl = await proxyConfiguration?.newUrl(`jiomart_${queryIndex}_${attempt}`);
+            const proxyUrl = mode === 'proxy'
+                ? await proxyConfiguration?.newUrl(`jiomart_${queryIndex}_${attempt}`)
+                : undefined;
+            log.info(`Trying JioMart ${mode} access for "${query}"`, { attempt, totalAttempts: fetchModes.length });
 
             for (let pageNo = 1; pageNo <= maxPagesPerQuery; pageNo += 1) {
                 const page = await fetchProductsPage({
@@ -90,14 +98,19 @@ async function collectPayloads(query: string, queryIndex: number, remaining: num
                 if (after >= remaining) break;
             }
 
+            if (!payloads.some(isReadableCatalogPayload)) {
+                throw new Error('JioMart catalogue response had no recognized product collection');
+            }
             if (countRelevantProductPayloads(payloads, query) === 0) {
-                throw new Error(`JioMart returned no products relevant to "${query}"`);
+                log.info(`JioMart returned a readable catalogue with no products relevant to "${query}".`);
             }
             return payloads;
         } catch (error) {
             lastError = error;
-            log.warning(`JioMart attempt ${attempt}/3 failed for "${query}"`, { error: String(error) });
-            if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
+            log.warning(`JioMart ${mode} attempt ${attempt}/${fetchModes.length} failed for "${query}"`, {
+                error: String(error),
+            });
+            if (attempt < fetchModes.length) await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
         }
     }
 
@@ -112,6 +125,7 @@ for (const [queryIndex, searchQuery] of searchQueries.entries()) {
 
     const payloads = await collectPayloads(searchQuery, queryIndex, maxResults - savedCount);
     if (payloads.length === 0) continue;
+    sourceValidQueryCount += 1;
 
     const products: ProductRecord[] = extractProducts(payloads, searchQuery, location);
     log.info(`Parsed JioMart search "${searchQuery}"`, {
@@ -119,6 +133,7 @@ for (const [queryIndex, searchQuery] of searchQueries.entries()) {
         productsFound: products.length,
     });
 
+    const savedBeforeQuery = savedCount;
     for (const product of products) {
         if (savedCount >= maxResults || spendingLimitReached) break;
 
@@ -159,6 +174,10 @@ for (const [queryIndex, searchQuery] of searchQueries.entries()) {
         }
     }
 
+    if (savedCount === savedBeforeQuery && !spendingLimitReached && !fatalBillingError) {
+        emptyQueries.push(searchQuery);
+    }
+
     if (!spendingLimitReached && !fatalBillingError) {
         await Actor.setStatusMessage(`Saved ${savedCount}/${maxResults} JioMart products`);
         const moreQueriesLeft = queryIndex < searchQueries.length - 1;
@@ -168,15 +187,31 @@ for (const [queryIndex, searchQuery] of searchQueries.entries()) {
     }
 }
 
+const completion = classifyCompletion({ savedCount, spendingLimitReached, sourceValidQueryCount });
+await Actor.setValue('OUTPUT', {
+    savedProductCount: savedCount,
+    sourceValidQueryCount,
+    skippedQueryCount: skippedQueries.length,
+    emptyQueryCount: emptyQueries.length,
+    emptyQueries,
+    skippedQueries,
+    spendingLimitReached,
+    completion,
+});
+
 if (fatalBillingError) throw fatalBillingError;
 
-if (savedCount === 0 && !spendingLimitReached) {
+if (completion === 'failed') {
     const reasons = skippedQueries.map((item) => `${item.query}: ${item.reason}`).join('; ');
     throw new Error(`JioMart scrape finished with zero products saved.${reasons ? ` Skipped: ${reasons}` : ''} The source may be blocked, empty, or filtered out.`);
 }
 
 if (skippedQueries.length > 0) log.warning('Some JioMart queries were skipped', { skippedQueries });
-if (!spendingLimitReached) await Actor.setStatusMessage(`Finished with ${savedCount} unique products`);
+if (!spendingLimitReached) {
+    await Actor.setStatusMessage(completion === 'valid-empty'
+        ? 'Finished successfully: no products matched the search and filters.'
+        : `Finished with ${savedCount} unique products`);
+}
 log.info(`JioMart scrape finished with ${savedCount} unique products.`);
 
 await Actor.exit();

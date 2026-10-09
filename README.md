@@ -1,6 +1,6 @@
 # JioMart Product Scraper: Prices & Stock
 
-Scrape public JioMart location-specific grocery and product listings for price monitoring, assortment research, stock checks, and retail reporting. The Actor opens JioMart in a browser session, applies your delivery-area location, captures the structured product responses used by the public page, and saves clean product rows to an Apify Dataset.
+Scrape public JioMart location-specific grocery and product listings for price monitoring, assortment research, stock checks, and retail reporting. The Actor requests JioMart's public catalog endpoint, applies your delivery pincode, and saves clean product rows to an Apify Dataset without running a browser.
 
 It extracts product titles, brands, pack sizes, prices, MRP, discounts, categories, stock status, images, product URLs, and scrape timestamps. Export results as JSON, CSV, Excel, HTML, or consume them through the Apify API. No JioMart login or API key is required.
 
@@ -49,22 +49,22 @@ For larger runs, increase `maxResults` gradually and keep `maxPagesPerQuery` low
 
 ## Pricing And Cost Control
 
-This Actor uses Apify Pay Per Event with platform usage paid by the user. As of the latest live check, active pricing is:
+This Actor uses Apify Pay Per Event. As verified on 10 October 2026, active pricing is:
 
 | Event | Price |
 | --- | ---: |
-| `product-scraped` | `$0.003` per saved product |
-| `apify-actor-start` | `$0.001` per GB start event |
+| `product-scraped` | `$0.001` per saved product ($1/1,000) |
+| `apify-actor-start` | `$0.00005` per start event through 1 GB |
 
-The default memory is 2 GB, so the startup event charge is approximately `$0.002` for the default run. Platform usage such as browser compute and Residential India proxy traffic is billed separately by Apify. Prices can change only through Apify's pricing process, so treat the live Console pricing as the source of truth before running large jobs.
+The default memory is 512 MB. Platform usage is included in the current PPE configuration. The Actor tries direct HTTP access before using a configured proxy fallback, which avoids Residential transfer when the public endpoint is reachable directly. Treat the live Console Pricing tab as authoritative before large jobs.
 
 Cost-control tips:
 
 - Start with one query, for example `rice` or `milk`.
-- Keep `maxResults: 1` for the first run, then scale gradually.
+- Keep `maxResults: 1` for the first verification run. For recurring work, batches of 20-50 products share fixed startup and any fallback cost more efficiently.
 - Keep `maxPagesPerQuery: 1` unless you need deeper coverage.
 - Use the current fields `maxResults` and `maxPagesPerQuery`; older fields such as `maxProducts` or `pagesPerQuery` are ignored.
-- Keep Residential India proxy enabled for location-specific reliability, but remember it can add platform usage cost.
+- Keep the Residential India option only as a fallback when reliability matters. Direct access is always attempted first; selecting no proxy prevents all proxy use.
 
 ## Input Fields
 
@@ -72,14 +72,15 @@ Cost-control tips:
 | --- | --- | --- |
 | `searchQueries` | string[] | One to five JioMart searches such as `rice`, `milk`, or `atta` |
 | `locationName` | string | Human-readable location label for your run |
-| `latitude` / `longitude` | number | Delivery-area coordinates for JioMart's location-aware catalog |
+| `pincode` | string | Six-digit Indian delivery pincode that controls the regional catalog |
+| `latitude` / `longitude` | number | Legacy saved-task compatibility fields; the current catalog path uses pincode |
 | `brands` | string[] | Optional exact brand filters, case-insensitive |
 | `categories` | string[] | Optional category text filters |
 | `inStockOnly` | boolean | Save only products available in the detected store |
 | `minPrice` / `maxPrice` | number | Optional INR price range |
 | `maxResults` | integer | Maximum unique products to save, up to 500 |
 | `maxPagesPerQuery` | integer | Maximum result payloads processed per search query |
-| `proxyConfiguration` | object | Apify Proxy settings. Residential India is recommended |
+| `proxyConfiguration` | object | Optional fallback settings; direct access is attempted first |
 
 ## Sample Output
 
@@ -108,12 +109,12 @@ Cost-control tips:
 
 ## Reliability Notes
 
-- Captured browser responses are accepted only when the product title, brand, category, or slug matches the requested search terms. Home-page recommendations and unrelated sponsored payloads are discarded instead of being returned as search results.
+- Catalog rows are accepted only when the product title, brand, category, or slug matches the requested search terms. Recommendations and unrelated sponsored payloads are discarded instead of being returned as search results.
 
 - JioMart prices, stock, delivery windows, and available products vary by detected location.
 - Some products do not expose ratings, discounts, or complete metadata. Missing values are saved as `null` or `N/A`.
-- The Actor fails blocked or empty zero-result runs instead of silently reporting success with no saved products.
-- JioMart can change its public website, API responses, or protection rules. Residential India proxy is recommended for cloud runs.
+- A readable catalog with no matching rows, or rows removed by explicit filters, finishes successfully with an empty dataset and a transparent `OUTPUT` summary. Blocked, unreadable, or structurally changed source responses still fail visibly.
+- JioMart can change its public website, API responses, or protection rules. A configured Residential India proxy is used only as a bounded fallback after direct access fails.
 
 ## Responsible Use
 

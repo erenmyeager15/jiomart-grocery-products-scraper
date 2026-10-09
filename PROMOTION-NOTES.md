@@ -9,7 +9,7 @@
 ## 60-second video script
 
 1. Open the Actor and show the one-result `rice` sample input.
-2. Point out the Mumbai coordinates, `maxResults: 1`, and Residential India proxy.
+2. Point out delivery pincode `400001`, `maxResults: 1`, and the direct-first connection with bounded proxy fallback.
 3. Run or show an existing run output with title, brand, price, MRP, discount, stock, image, and URL.
 4. Export the dataset to CSV or Excel.
 5. Mention cost controls: start with one query, one result, and one page before scaling.
@@ -20,7 +20,7 @@ I polished my JioMart Product Scraper on Apify for cleaner price and stock monit
 
 It can collect public JioMart product rows by search query and location, including title, brand, pack size, price, MRP, discount, stock status, image, product URL, and timestamp.
 
-Best first test: one query, `maxResults: 1`, `maxPagesPerQuery: 1`, and Residential India proxy for location-specific results.
+Best first test: one query, `maxResults: 1`, and `maxPagesPerQuery: 1`. The delivery pincode controls the regional catalog; direct access is attempted before any configured proxy fallback.
 
 Useful for retail research, FMCG assortment tracking, and quick product price snapshots.
 
@@ -47,5 +47,5 @@ I kept the default run small so people can test before scaling.
 - Do not claim official JioMart API access.
 - Do not claim private account, order, customer, or delivery-partner data.
 - Do not promise guaranteed availability for every pincode or every product.
-- Mention Residential India proxy and platform usage when discussing cost.
+- Explain that direct access is attempted first and a configured Residential India proxy is only a bounded fallback. Never claim zero proxy usage for every network.
 - Use real output samples only; do not overstate coverage beyond public catalog data.
