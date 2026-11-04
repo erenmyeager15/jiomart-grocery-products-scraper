@@ -77,8 +77,9 @@ function asPincode(value: unknown): string {
     if (value === undefined || value === null || value === '') return '400001';
     const text = typeof value === 'number' ? String(value) : value;
     if (typeof text !== 'string') fail('must be a 6-digit Indian pincode.', 'pincode');
-    const trimmed = text.trim();
-    if (!/^[1-9][0-9]{5}$/.test(trimmed)) fail('must be a 6-digit Indian pincode.', 'pincode');
+    // People write pincodes as "400 001" or "400-001"; JioMart wants the six digits.
+    const trimmed = text.trim().replace(/[\s-]+/g, '');
+    if (!/^[1-9][0-9]{5}$/.test(trimmed)) fail(`must be a 6-digit Indian pincode such as 400001 (received "${text.trim()}").`, 'pincode');
     return trimmed;
 }
 

@@ -77,11 +77,14 @@ async function collectPayloads(query: string, queryIndex: number, remaining: num
                 });
 
                 if (page.statusCode >= 400) {
+                    // A later page failing keeps the products already collected.
                     if (pageNo === 1) throw new Error(`JioMart products API returned HTTP ${page.statusCode}`);
                     log.warning(`Stopping "${query}" at page ${pageNo}: HTTP ${page.statusCode}`);
                     break;
                 }
-                if (isBlockedPage('', page.bodyText)) {
+                // Only a non-JSON body can be a challenge page. Scanning a valid
+                // catalogue for words like "captcha" could reject real products.
+                if (!page.payload && isBlockedPage('', page.bodyText)) {
                     throw new Error('JioMart products API returned a challenge response');
                 }
                 if (!page.payload) {

@@ -71,6 +71,13 @@ test('normalizes default input to a bounded Mumbai rice run', () => {
     assert.equal(input.proxyConfiguration.apifyProxyCountry, 'IN');
 });
 
+test('accepts pincodes written with spaces or hyphens', () => {
+    assert.equal(normalizeInput({ pincode: '400 001' }).pincode, '400001');
+    assert.equal(normalizeInput({ pincode: ' 560-001 ' }).pincode, '560001');
+    assert.equal(normalizeInput({ pincode: 110001 }).pincode, '110001');
+    assert.throws(() => normalizeInput({ pincode: '4000' }), /6-digit Indian pincode/);
+});
+
 test('rejects oversized or invalid input values', () => {
     assert.throws(
         () => normalizeInput({ searchQueries: ['a', 'b', 'c', 'd', 'e', 'f'] }),

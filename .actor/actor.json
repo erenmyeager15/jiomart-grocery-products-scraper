@@ -3,7 +3,7 @@
   "name": "jiomart-grocery-products-scraper",
   "title": "JioMart Product Scraper - $1/1k, Prices & Stock by Pincode",
   "description": "Scrape public JioMart products by keyword and delivery pincode: prices, MRP, discounts, pack sizes, stock, categories, ratings, images, and URLs. $1/1,000 saved products plus the small Actor Start fee; no login.",
-  "version": "1.0",
+  "version": "1.1",
   "buildTag": "latest",
   "dockerfile": "Dockerfile",
   "input": "../INPUT_SCHEMA.json",
