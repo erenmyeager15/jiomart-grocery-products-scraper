@@ -36,6 +36,40 @@ const location: LocationSnapshot = {
     deliveryMessage: null,
 };
 
+const normalizeFilterText = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** "Cadbury" should match "Cadbury Dairy Milk" and "CADBURY", not only an exact
+ * brand string. Rows with no brand are kept when the title names the brand. */
+function matchesBrand(product: ProductRecord, wanted: Set<string>): boolean {
+    if (wanted.size === 0) return true;
+    const brand = product.brand === 'N/A' ? '' : normalizeFilterText(product.brand);
+    const title = normalizeFilterText(product.title);
+    return [...wanted].map(normalizeFilterText).some((name) => name
+        && ((brand && (brand.includes(name) || name.includes(brand))) || ` ${title} `.includes(` ${name} `)));
+}
+
+/** "edible oil" should match the "Edible Oils" subcategory, not only the
+ * top-level category "Cooking Essentials". */
+function matchesCategory(product: ProductRecord, wanted: Set<string>): boolean {
+    if (wanted.size === 0) return true;
+    const text = normalizeFilterText([product.category, ...(product.categoryPath ?? [])].filter((c) => c && c !== 'N/A').join(' | '));
+    return [...wanted].map(normalizeFilterText).some((name) => {
+        if (!name) return false;
+        if (text.includes(name)) return true;
+        // Singular/plural: "edible oil" vs "Edible Oils".
+        const words = name.split(' ');
+        return words.every((word) => text.includes(word.replace(/s$/, '')));
+    });
+}
+
+function passesFilters(product: ProductRecord): boolean {
+    if (!matchesBrand(product, brands) || !matchesCategory(product, categories)) return false;
+    if (inStockOnly && !product.inStock) return false;
+    return product.price !== null && product.price >= minPrice && product.price <= maxPrice;
+}
+
+const filtersActive = brands.size > 0 || categories.size > 0 || minPrice > 0 || maxPrice < 1_000_000;
+
 const seenProductKeys = new Set<string>();
 let savedCount = 0;
 let spendingLimitReached = false;
@@ -98,7 +132,12 @@ async function collectPayloads(query: string, queryIndex: number, remaining: num
 
                 // No new products means the catalogue is exhausted for this query.
                 if (after === before) break;
-                if (after >= remaining) break;
+                // Filters drop rows after fetching, so stop on matching rows,
+                // not raw rows; otherwise a filtered run read one page and saved 0.
+                const usable = filtersActive
+                    ? extractProducts(payloads, query, location).filter(passesFilters).length
+                    : after;
+                if (usable >= remaining) break;
             }
 
             if (!payloads.some(isReadableCatalogPayload)) {
@@ -143,11 +182,9 @@ for (const [queryIndex, searchQuery] of searchQueries.entries()) {
         const seenKey = product.productId ?? product.productUrl
             ?? `${product.source}:${product.searchQuery}:${product.position}:${product.title}`;
         if (seenProductKeys.has(seenKey)) continue;
-        if (brands.size > 0 && product.brand !== 'N/A' && !brands.has(product.brand.toLowerCase())) continue;
-        const categoryText = product.category === 'N/A' ? '' : product.category.toLowerCase();
-        if (categories.size > 0 && ![...categories].some((category) => categoryText.includes(category))) continue;
-        if (inStockOnly && !product.inStock) continue;
-        if (product.price === null || product.price < minPrice || product.price > maxPrice) continue;
+        if (!matchesBrand(product, brands)) continue;
+        if (!matchesCategory(product, categories)) continue;
+        if (!passesFilters(product)) continue;
 
         try {
             // Push and charge atomically so records beyond the user's charge limit are not

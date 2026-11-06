@@ -55,6 +55,8 @@ export interface ProductRecord {
     currency: string;
     packSize: string;
     category: string;
+    /** Category, subcategory and leaf category, broadest first. */
+    categoryPath: string[];
     rating: number | null;
     ratingCount: number | null;
     inStock: boolean | null;

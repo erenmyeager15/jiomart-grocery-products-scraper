@@ -136,6 +136,17 @@ const resolveCategory = (item: JsonObject): string | null => {
         ?? pickString(item, [['category'], ['category_name'], ['l1_category']]);
 };
 
+/** Category, subcategory and leaf category names, e.g. "Cooking Essentials",
+ * "Edible Oils", "Groundnut Oil". The category filter matches against all of them. */
+const resolveCategoryPath = (item: JsonObject): string[] => {
+    const attributes = asObject(item.attributes);
+    const names = ['l1', 'l2', 'l3'].flatMap((level) => [
+        asString(asObject(getPath(item, ['hierarchy', `${level}_category`]))?.name),
+        firstString(attributes?.[`${level}-category`]),
+    ]);
+    return [...new Set(names.filter((name): name is string => Boolean(name)))];
+};
+
 const resolveRating = (item: JsonObject): number | null => (
     pickNumber(item, [['rating'], ['rating', 'average'], ['avg_rating'], ['ratings', 'average']])
 );
@@ -376,6 +387,7 @@ export const extractProducts = (
                 currency: asString(getPath(rawItem, ['price', 'currency_code'])) ?? asString(rawItem.currency) ?? 'INR',
                 packSize: textOrNA(extractPackSize(rawItem, attributes, productName)),
                 category: textOrNA(resolveCategory(rawItem)),
+                categoryPath: resolveCategoryPath(rawItem),
                 rating: resolveRating(rawItem),
                 ratingCount: null,
                 inStock: resolveInStock(rawItem),
